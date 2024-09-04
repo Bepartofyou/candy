@@ -15,9 +15,18 @@ endif()
 
 if (${CANDY_STATIC_OPENSSL})
     target_link_libraries(${CANDY_EXECUTE_NAME} PRIVATE ${OPENSSL_LIB_CRYPTO} ${OPENSSL_LIB_SSL})
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SSL_DEPS REQUIRED openssl)
+    add_definitions(${SSL_DEPS_CFLAGS})
+    include_directories(${SSL_DEPS_INCLUDEDIR})
+    target_link_libraries(${CANDY_EXECUTE_NAME} PRIVATE ${SSL_DEPS_LIBRARIES})
 endif()
 
 if (${CANDY_STATIC_POCO})
+    target_link_libraries(${CANDY_EXECUTE_NAME} PRIVATE Poco::Foundation Poco::Net Poco::NetSSL)
+else()
+    find_package(Poco REQUIRED COMPONENTS Foundation Net NetSSL)
     target_link_libraries(${CANDY_EXECUTE_NAME} PRIVATE Poco::Foundation Poco::Net Poco::NetSSL)
 endif()
 
