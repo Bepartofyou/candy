@@ -9,85 +9,121 @@ option(CANDY_STATIC "Static linking dependent libraries")
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 if (${CANDY_STATIC})
-    set(CMAKE_SKIP_BUILD_RPATH TRUE)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
+
+    if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+        set(CMAKE_SKIP_BUILD_RPATH TRUE)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
+    endif()
     set(CANDY_STATIC_OPENSSL 1)
     set(CANDY_STATIC_FMT 1)
     set(CANDY_STATIC_SPDLOG 1)
     set(CANDY_STATIC_POCO 1)
+
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+        set(ENV{PKG_CONFIG_PATH} "${CMAKE_SOURCE_DIR}/../fmt/output/lib/pkgconfig/:${CMAKE_SOURCE_DIR}/../spdlog/output/lib/pkgconfig:${CMAKE_SOURCE_DIR}/../openssl-3.3.1/output/lib/pkgconfig")
+
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(DEPS REQUIRED fmt)
+        add_definitions(${DEPS_CFLAGS})
+        include_directories(${DEPS_INCLUDEDIR})
+        message(STATUS "${DEPS_CFLAGS} ${DEPS_INCLUDEDIR}  ${DEPS_LIBRARIES}")
+
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(DEPS REQUIRED spdlog)
+        add_definitions(${DEPS_CFLAGS})
+        include_directories(${DEPS_INCLUDEDIR})
+        message(STATUS "${DEPS_CFLAGS} ${DEPS_INCLUDEDIR}  ${DEPS_LIBRARIES}")
+
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(DEPS REQUIRED openssl)
+        add_definitions(${DEPS_CFLAGS})
+        include_directories(${DEPS_INCLUDEDIR})
+        message(STATUS "${DEPS_CFLAGS} ${DEPS_INCLUDEDIR}  ${DEPS_LIBRARIES}")
+
+        # include_directories(${CMAKE_SOURCE_DIR}/../fmt/output/include)
+        link_directories(${CMAKE_SOURCE_DIR}/../fmt/output/lib)
+        # include_directories(${CMAKE_SOURCE_DIR}/../spdlog/output/include)
+        link_directories(${CMAKE_SOURCE_DIR}/../spdlog/output/lib)
+        include_directories(${CMAKE_SOURCE_DIR}/../poco/output/include)
+        link_directories(${CMAKE_SOURCE_DIR}/../poco/output/lib)
+        # include_directories(${CMAKE_SOURCE_DIR}/../openssl-3.3.1/output/include)
+        link_directories(${CMAKE_SOURCE_DIR}/../openssl-3.3.1/output/lib)
+    endif()
 endif()
 
-if (${CANDY_STATIC_OPENSSL})
-    execute_process(
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/openssl
-    )
-    execute_process(
-        COMMAND ${CMAKE_COMMAND} -DTARGET_OPENSSL=${TARGET_OPENSSL} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/openssl
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/openssl
-        RESULT_VARIABLE result
-    )
-    if(NOT result EQUAL "0")
-        message(FATAL_ERROR "OpenSSL CMake failed")
+if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")  
+    if (${CANDY_STATIC_OPENSSL})
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/openssl
+        )
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -DTARGET_OPENSSL=${TARGET_OPENSSL} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/openssl
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/openssl
+            RESULT_VARIABLE result
+        )
+        if(NOT result EQUAL "0")
+            message(FATAL_ERROR "OpenSSL CMake failed")
+        endif()
+
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR}/openssl
+            RESULT_VARIABLE result
+        )
+        if(NOT result EQUAL "0")
+            message(FATAL_ERROR "OpenSSL Download or Configure failed")
+        endif()
+
+        include(ProcessorCount)
+        ProcessorCount(nproc)
+        if(nproc EQUAL 0)
+            set(nproc 1)
+        endif()
+        set(OPENSSL_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/openssl/src/openssl)
+        execute_process(
+            COMMAND make -j${nproc}
+            WORKING_DIRECTORY ${OPENSSL_ROOT_DIR}
+            RESULT_VARIABLE result
+        )
+        if(NOT result EQUAL "0")
+            message(FATAL_ERROR "OpenSSL Build failed")
+        endif()
+
+        set(OPENSSL_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/openssl/src/openssl)
+        set(OPENSSL_INCLUDE ${OPENSSL_ROOT_DIR}/include)
+        set(OPENSSL_LIB_CRYPTO ${OPENSSL_ROOT_DIR}/libcrypto.a)
+        set(OPENSSL_LIB_SSL ${OPENSSL_ROOT_DIR}/libssl.a)
+        include_directories(${OPENSSL_INCLUDE})
     endif()
 
-    execute_process(
-        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_BINARY_DIR}/openssl
-        RESULT_VARIABLE result
-    )
-    if(NOT result EQUAL "0")
-        message(FATAL_ERROR "OpenSSL Download or Configure failed")
+    if (${CANDY_STATIC_FMT})
+        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Fetch.cmake)
+        Fetch(fmt "https://github.com/fmtlib/fmt.git" "10.2.1")
     endif()
 
-    include(ProcessorCount)
-    ProcessorCount(nproc)
-    if(nproc EQUAL 0)
-        set(nproc 1)
-    endif()
-    set(OPENSSL_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/openssl/src/openssl)
-    execute_process(
-        COMMAND make -j${nproc}
-        WORKING_DIRECTORY ${OPENSSL_ROOT_DIR}
-        RESULT_VARIABLE result
-    )
-    if(NOT result EQUAL "0")
-        message(FATAL_ERROR "OpenSSL Build failed")
+    if (${CANDY_STATIC_SPDLOG})
+        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Fetch.cmake)
+        Fetch(spdlog "https://github.com/gabime/spdlog.git" "v1.14.1")
     endif()
 
-    set(OPENSSL_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl/openssl/src/openssl)
-    set(OPENSSL_INCLUDE ${OPENSSL_ROOT_DIR}/include)
-    set(OPENSSL_LIB_CRYPTO ${OPENSSL_ROOT_DIR}/libcrypto.a)
-    set(OPENSSL_LIB_SSL ${OPENSSL_ROOT_DIR}/libssl.a)
-    include_directories(${OPENSSL_INCLUDE})
-endif()
-
-if (${CANDY_STATIC_FMT})
-    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Fetch.cmake)
-    Fetch(fmt "https://github.com/fmtlib/fmt.git" "10.2.1")
-endif()
-
-if (${CANDY_STATIC_SPDLOG})
-    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Fetch.cmake)
-    Fetch(spdlog "https://github.com/gabime/spdlog.git" "v1.14.1")
-endif()
-
-if (${CANDY_STATIC_POCO})
-    set(ENABLE_DATA OFF CACHE BOOL "" FORCE)
-    set(ENABLE_DATA_MYSQL OFF CACHE BOOL "" FORCE)
-    set(ENABLE_DATA_POSTGRESQL OFF CACHE BOOL "" FORCE)
-    set(ENABLE_DATA_SQLITE OFF CACHE BOOL "" FORCE)
-    set(ENABLE_DATA_ODBC OFF CACHE BOOL "" FORCE)
-    set(ENABLE_MONGODB OFF CACHE BOOL "" FORCE)
-    set(ENABLE_REDIS OFF CACHE BOOL "" FORCE)
-    set(ENABLE_ENCODINGS OFF CACHE BOOL "" FORCE)
-    set(ENABLE_PROMETHEUS OFF CACHE BOOL "" FORCE)
-    set(ENABLE_PAGECOMPILER OFF CACHE BOOL "" FORCE)
-    set(ENABLE_PAGECOMPILER_FILE2PAGE OFF CACHE BOOL "" FORCE)
-    set(ENABLE_ACTIVERECORD OFF CACHE BOOL "" FORCE)
-    set(ENABLE_ACTIVERECORD_COMPILER OFF CACHE BOOL "" FORCE)
-    set(ENABLE_ZIP OFF CACHE BOOL "" FORCE)
-    set(ENABLE_JWT OFF CACHE BOOL "" FORCE)
-    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Fetch.cmake)
-    Fetch(poco "https://github.com/pocoproject/poco.git" "poco-1.13.3-release")
+    if (${CANDY_STATIC_POCO})
+        set(ENABLE_DATA OFF CACHE BOOL "" FORCE)
+        set(ENABLE_DATA_MYSQL OFF CACHE BOOL "" FORCE)
+        set(ENABLE_DATA_POSTGRESQL OFF CACHE BOOL "" FORCE)
+        set(ENABLE_DATA_SQLITE OFF CACHE BOOL "" FORCE)
+        set(ENABLE_DATA_ODBC OFF CACHE BOOL "" FORCE)
+        set(ENABLE_MONGODB OFF CACHE BOOL "" FORCE)
+        set(ENABLE_REDIS OFF CACHE BOOL "" FORCE)
+        set(ENABLE_ENCODINGS OFF CACHE BOOL "" FORCE)
+        set(ENABLE_PROMETHEUS OFF CACHE BOOL "" FORCE)
+        set(ENABLE_PAGECOMPILER OFF CACHE BOOL "" FORCE)
+        set(ENABLE_PAGECOMPILER_FILE2PAGE OFF CACHE BOOL "" FORCE)
+        set(ENABLE_ACTIVERECORD OFF CACHE BOOL "" FORCE)
+        set(ENABLE_ACTIVERECORD_COMPILER OFF CACHE BOOL "" FORCE)
+        set(ENABLE_ZIP OFF CACHE BOOL "" FORCE)
+        set(ENABLE_JWT OFF CACHE BOOL "" FORCE)
+        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Fetch.cmake)
+        Fetch(poco "https://github.com/pocoproject/poco.git" "poco-1.13.3-release")
+    endif()
 endif()
 
 set(CANDY_EXECUTE_NAME "candy")
