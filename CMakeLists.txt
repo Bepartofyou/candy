@@ -15,6 +15,36 @@ if (${CANDY_STATIC})
     set(CANDY_STATIC_FMT 1)
     set(CANDY_STATIC_SPDLOG 1)
     set(CANDY_STATIC_POCO 1)
+else()
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+        execute_process(
+            COMMAND brew --prefix spdlog
+            OUTPUT_VARIABLE SPDLOG_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        link_directories("${SPDLOG_PATH}/lib")
+        execute_process(
+            COMMAND brew --prefix fmt
+            OUTPUT_VARIABLE FMT_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        link_directories("${FMT_PATH}/lib")
+        execute_process(
+            COMMAND brew --prefix openssl
+            OUTPUT_VARIABLE OPENSSL_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        include_directories("${OPENSSL_PATH}/include")
+        link_directories("${OPENSSL_PATH}/lib")
+
+        execute_process(
+            COMMAND brew --prefix poco
+            OUTPUT_VARIABLE POCO_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        include_directories("${POCO_PATH}/include")
+        link_directories("${POCO_PATH}/lib")
+    endif()
 endif()
 
 if (${CANDY_STATIC_OPENSSL})
