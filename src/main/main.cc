@@ -43,6 +43,8 @@ struct arguments {
     int discovery = 0;
     int routeCost = 0;
     int mtu = 1400;
+
+    std::string storageDirectory;
 };
 
 int disableLogTimestamp() {
@@ -95,6 +97,7 @@ void parseConfig(std::string cfgFile, arguments &args) {
             {"port", [&](const std::string &value) { args.udpPort = std::stoi(value); }},
             {"mtu", [&](const std::string &value) { args.mtu = std::stoi(value); }},
             {"localhost", [&](const std::string &value) { args.localhost = value; }},
+            {"storageDirectory", [&](const std::string &value) { args.storageDirectory = value; }},
         };
         auto trim = [](std::string str) {
             if (str.length() >= 2 && str.front() == '\"' && str.back() == '\"') {
@@ -318,6 +321,7 @@ int parseConfig(int argc, char *argv[], arguments &args) {
     program.add_argument("-r", "--route").help("routing cost").scan<'i', int>().metavar("COST");
     program.add_argument("--discovery").help("discovery interval").scan<'i', int>().metavar("SECONDS");
     program.add_argument("--localhost").help("local ip").metavar("IP");
+    program.add_argument("--storageDirectory").help("linux address storageDirectory").metavar("Directory");
     program.add_argument("-c", "--config").help("config file path").metavar("PATH");
     program.add_argument("--no-timestamp").implicit_value(true).help("disable log time");
     program.add_argument("--debug").implicit_value(true).help("show debug log");
@@ -341,6 +345,8 @@ int parseConfig(int argc, char *argv[], arguments &args) {
         args.tun = program.is_used("--tun") ? program.get<std::string>("--tun") : args.tun;
         args.stun = program.is_used("--stun") ? program.get<std::string>("--stun") : args.stun;
         args.localhost = program.is_used("--localhost") ? program.get<std::string>("--localhost") : args.localhost;
+        args.storageDirectory =
+            program.is_used("--storageDirectory") ? program.get<std::string>("--storageDirectory") : args.storageDirectory;
         args.udpPort = program.is_used("--port") ? program.get<int>("--port") : args.udpPort;
         args.mtu = program.is_used("--mtu") ? program.get<int>("--mtu") : args.mtu;
         args.discovery = program.is_used("--discovery") ? program.get<int>("--discovery") : args.discovery;
@@ -376,6 +382,10 @@ int parseConfig(int argc, char *argv[], arguments &args) {
 int main(int argc, char *argv[]) {
     arguments args;
     parseConfig(argc, argv, args);
+
+#if POCO_OS != POCO_OS_WINDOWS_NT
+    storageDirectory = args.storageDirectory;
+#endif
 
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
