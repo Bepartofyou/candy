@@ -266,12 +266,56 @@ void signalHandler(int signal) {
     running.notify_one();
 }
 
+int countPathSegments(const char *url) {
+    const char *protocolSeparator = "://";
+    const char *pathStart;
+    int pathCount = 0;
+
+    // Find the start of the path by locating "://"
+    pathStart = strstr(url, protocolSeparator);
+    if (pathStart != NULL) {
+        // Move the pointer to the character after "://"
+        pathStart += strlen(protocolSeparator);
+
+        // Find the first '/' after the host name
+        pathStart = strchr(pathStart, '/');
+
+        // If we found a path part
+        if (pathStart != NULL) {
+            // Move past the first '/'
+            pathStart++;
+            while (*pathStart != '\0') {
+                // Find the next '/'
+                const char *nextSlash = strchr(pathStart, '/');
+
+                // If we find a '/', it is a segment if there's something before it
+                if (nextSlash != NULL) {
+                    if (nextSlash != pathStart) {
+                        pathCount++;
+                    }
+                    pathStart = nextSlash + 1;
+                } else {
+                    // If there's no more '/', count the last segment if not empty
+                    if (*pathStart != '\0') {
+                        pathCount++;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    return pathCount;
+}
+
 int serve(const arguments &args) {
 
     Poco::Net::initializeNetwork();
 
     Candy::Server server;
-    Candy::Client client;
+    Candy::Client client, suClient;
+
+    bool super = countPathSegments(args.websocket.c_str()) < 1;
 
     if (args.mode == "server") {
         server.setPassword(args.password);
@@ -297,12 +341,34 @@ int serve(const arguments &args) {
         client.setWorkers(args.workers);
         client.setName(args.name);
         client.run();
+
+        if (!super) {
+            spdlog::error("need to open suer net, super:%d", super);
+            suClient.setAddressUpdateCallback([&](const std::string &cidr) { return saveLatestAddress(args.name, cidr); });
+            suClient.setDiscoveryInterval(args.discovery);
+            suClient.setRouteCost(args.routeCost);
+            suClient.setUdpBindPort(args.udpPort);
+            suClient.setLocalhost(args.localhost);
+            suClient.setPassword(args.password);
+            suClient.setWebSocketServer(args.websocket);
+            suClient.setStun(args.stun);
+            suClient.setTunAddress(args.tun);
+            clsuClientent.setExpectedAddress(getLastestAddress(args.name));
+            suClient.setVirtualMac(virtualMac(args.name));
+            suClient.setMtu(args.mtu);
+            suClient.setWorkers(args.workers);
+            suClient.setName(args.name);
+            suClient.run();
+        }
     }
 
     running.wait(true);
 
     server.shutdown();
     client.shutdown();
+    if (!super) {
+        suClient.shutdown();
+    }
 
     if (exitCode == 0) {
         spdlog::info("service exit: normal");
