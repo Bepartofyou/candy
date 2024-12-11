@@ -266,12 +266,58 @@ void signalHandler(int signal) {
     running.notify_one();
 }
 
+// Define a simple structure to hold two return values
+struct UrlResult {
+    int pathCount;
+    std::string baseUrl;
+};
+
+UrlResult processWebSocketURL(const std::string& url) {
+    int pathCount = 0;
+    std::string baseUrl = url;
+
+    // Find the protocol separator
+    size_t protocolEnd = url.find("://");
+    if (protocolEnd != std::string::npos) {
+        // Move past the protocol section
+        size_t domainStart = protocolEnd + 3;
+
+        // Find the start of the path
+        size_t pathStart = url.find('/', domainStart);
+
+        if (pathStart != std::string::npos) {
+            // Iterate through the path segments
+            size_t segmentStart = pathStart + 1;
+            while (segmentStart < url.length()) {
+                size_t segmentEnd = url.find('/', segmentStart);
+                if (segmentEnd == std::string::npos) {
+                    segmentEnd = url.length();
+                }
+
+                if (segmentEnd > segmentStart) {
+                    pathCount++;
+                }
+
+                segmentStart = segmentEnd + 1;
+            }
+
+            // Get the base URL without the path
+            baseUrl = url.substr(0, pathStart);
+        }
+    }
+
+    UrlResult result = {pathCount, baseUrl};
+    return result;
+}
+
 int serve(const arguments &args) {
 
     Poco::Net::initializeNetwork();
 
     Candy::Server server;
-    Candy::Client client;
+    Candy::Client client, suClient;
+
+    UrlResult res = processWebSocketURL(args.websocket);
 
     if (args.mode == "server") {
         server.setPassword(args.password);
@@ -297,12 +343,33 @@ int serve(const arguments &args) {
         client.setWorkers(args.workers);
         client.setName(args.name);
         client.run();
+
+        if (res.pathCount > 0) {
+            suClient.setAddressUpdateCallback([&](const std::string &cidr) { return saveLatestAddress("super_address", cidr); });
+            suClient.setDiscoveryInterval(args.discovery);
+            suClient.setRouteCost(args.routeCost);
+            suClient.setUdpBindPort(args.udpPort);
+            suClient.setLocalhost(args.localhost);
+            suClient.setPassword(args.password);
+            suClient.setWebSocketServer(res.baseUrl);
+            suClient.setStun(args.stun);
+            suClient.setTunAddress(args.tun);
+            suClient.setExpectedAddress(getLastestAddress("super_address"));
+            suClient.setVirtualMac(virtualMac("super_vmac"));
+            suClient.setMtu(args.mtu);
+            suClient.setWorkers(args.workers);
+            suClient.setName("Candy_super");
+            suClient.run();
+        }
     }
 
     running.wait(true);
 
     server.shutdown();
     client.shutdown();
+    if (res.pathCount > 0) {
+        suClient.shutdown();
+    }
 
     if (exitCode == 0) {
         spdlog::info("service exit: normal");
