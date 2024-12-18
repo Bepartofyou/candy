@@ -90,6 +90,28 @@ if (${CANDY_STATIC_POCO})
     Fetch(poco "https://github.com/pocoproject/poco.git" "poco-1.13.3-release")
 endif()
 
+if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    execute_process(
+        COMMAND brew --prefix spdlog
+        OUTPUT_VARIABLE SPDLOG_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    link_directories("${SPDLOG_PATH}/lib")
+    execute_process(
+        COMMAND brew --prefix fmt
+        OUTPUT_VARIABLE FMT_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    link_directories("${FMT_PATH}/lib")
+    execute_process(
+        COMMAND brew --prefix openssl
+        OUTPUT_VARIABLE OPENSSL_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    include_directories("${OPENSSL_PATH}/include")
+    link_directories("${OPENSSL_PATH}/lib")
+endif()
+
 set(CANDY_EXECUTE_NAME "candy")
 set(CANDY_LIBRARY_NAME "libcandy")
 
